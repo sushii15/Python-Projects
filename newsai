@@ -1,0 +1,77 @@
+import requests
+from bs4 import BeautifulSoup
+from datetime import datetime
+import schedule
+import time
+
+# Define news sources and their CSS selectors
+SOURCES = {
+    "BBC": {"url": "https://www.bbc.com/news", "article_selector": "a.gs-c-promo-heading"},
+    "Reuters": {"url": "https://www.reuters.com/", "article_selector": "a.story-title"},
+    "CNN": {"url": "https://edition.cnn.com/world", "article_selector": "h3.cd__headline a"},
+    "Al Jazeera": {"url": "https://www.aljazeera.com/news/", "article_selector": "a.u-clickable-card__link"},
+    "The Guardian": {"url": "https://www.theguardian.com/international", "article_selector": "a.u-faux-block-link__overlay"},
+    "New York Times": {"url": "https://www.nytimes.com/", "article_selector": "h2.esl82me2 a"},
+    "Fox News": {"url": "https://www.foxnews.com/", "article_selector": "article a"},
+    "NBC News": {"url": "https://www.nbcnews.com/", "article_selector": "h2.tease-card__headline a"},
+    "The Washington Post": {"url": "https://www.washingtonpost.com/", "article_selector": "div.headline a"},
+    "Bloomberg": {"url": "https://www.bloomberg.com/", "article_selector": "a.story-package-module__story__headline-link"},
+}
+
+def fetch_html(url):
+    """Fetch HTML content from a given URL."""
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+        return response.text
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching {url}: {e}")
+        return None
+
+def extract_last_part_of_link(link):
+    """Extract the last part of the URL as a brief summary."""
+    return link.rstrip('/').split('/')[-1].replace('-', ' ')
+
+def scrape_news():
+    """Scrape headlines and sublink summaries from all defined sources."""
+    all_articles = []
+    for source, config in SOURCES.items():
+        print(f"Scraping news from {source}...")
+        html = fetch_html(config["url"])
+        if not html:
+            continue
+
+        soup = BeautifulSoup(html, "html.parser")
+        for item in soup.select(config["article_selector"], limit=5):  # Limit to 5 articles per source
+            title = item.get_text(strip=True)
+            link = item["href"]
+            if not link.startswith("http"):
+                link = config["url"].strip("/") + link  # Handle relative links
+            sublink_summary = extract_last_part_of_link(link)  # Extract the last part of the URL
+            all_articles.append(f"{title}\n{sublink_summary}\n")
+    return all_articles
+
+def generate_news_report():
+    """Generate and display the news report directly in the console."""
+    print(f"Generating news report at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}...\n")
+    articles = scrape_news()
+    if not articles:
+        print("No articles found. Exiting.")
+        return
+
+    print("News of the Day:\n")
+    for article in articles:
+        print(article)
+    print("=" * 80)
+
+def schedule_news_updates():
+    """Schedule news updates every 1 minute."""
+    schedule.every(1).minutes.do(generate_news_report)
+    print("Scheduled news updates every 1 minute.\n")
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+if __name__ == "__main__":
+    schedule_news_updates()
